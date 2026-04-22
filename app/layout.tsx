@@ -18,7 +18,7 @@ const cormorant = Cormorant_Garamond({
 export const metadata: Metadata = {
   title: "Simone Matos • Terapeuta Psicóloga",
   description:
-    "Página premium com infraestrutura de login Google, tracking, CRM, lead scoring e APIs em Next.js.",
+    "Simone Matos é terapeuta psicóloga especializada em ajudar mulheres a superar inseguranças, traumas e bloqueios emocionais.",
 };
 
 export default function RootLayout({
