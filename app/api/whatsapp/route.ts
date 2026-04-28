@@ -31,14 +31,6 @@ function formDataToObject(params: URLSearchParams) {
   return obj;
 }
 
-function getClientIp(req: NextRequest) {
-  return (
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "unknown"
-  );
-}
-
 async function recordWhatsAppEvent(input: {
   name: string;
   from?: string;
@@ -62,8 +54,8 @@ async function recordWhatsAppEvent(input: {
         },
       },
     });
-  } catch {
-    // Não derruba o webhook se o banco falhar.
+  } catch (error) {
+    console.error("Erro ao registrar evento WhatsApp:", error);
   }
 }
 
@@ -74,20 +66,15 @@ function validateTwilioSignature({
   req: NextRequest;
   rawBody: string;
 }) {
-  const shouldValidate = process.env.TWILIO_VALIDATE_SIGNATURE !== "false";
+  const shouldValidate = process.env.TWILIO_VALIDATE_SIGNATURE === "true";
 
   if (!shouldValidate) return true;
 
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const publicUrl = process.env.TWILIO_WEBHOOK_PUBLIC_URL;
-
-  if (!authToken || !publicUrl) {
-    return false;
-  }
-
   const signature = req.headers.get("x-twilio-signature");
 
-  if (!signature) {
+  if (!authToken || !publicUrl || !signature) {
     return false;
   }
 
@@ -143,9 +130,6 @@ export async function POST(req: NextRequest) {
     body,
     messageSid,
     profileName,
-    metadata: {
-      ip: getClientIp(req),
-    },
   });
 
   try {
@@ -155,10 +139,14 @@ export async function POST(req: NextRequest) {
       userName: profileName,
     });
 
+    const reply =
+      result.reply?.trim() ||
+      "Posso te ajudar com informações sobre o atendimento. Me diga sua dúvida principal.";
+
     await recordWhatsAppEvent({
       name: "whatsapp_message_replied",
       from,
-      body: result.reply,
+      body: reply,
       messageSid,
       profileName,
       metadata: {
@@ -167,16 +155,17 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return new NextResponse(twimlMessage(result.reply), {
+    return new NextResponse(twimlMessage(reply), {
       status: 200,
       headers: {
         "Content-Type": "text/xml; charset=utf-8",
       },
     });
-  } catch {
+  } catch (error) {
+    console.error("Erro no bot WhatsApp:", error);
+
     const fallback =
-      process.env.HUMAN_HANDOFF_MESSAGE ||
-      "Tive uma instabilidade aqui. Vou encaminhar para atendimento humano te responder com segurança.";
+      "Tive uma instabilidade aqui, mas posso continuar tentando te ajudar. Me mande sua dúvida de forma simples.";
 
     await recordWhatsAppEvent({
       name: "whatsapp_bot_error",
@@ -184,6 +173,9 @@ export async function POST(req: NextRequest) {
       body,
       messageSid,
       profileName,
+      metadata: {
+        error: error instanceof Error ? error.message : "unknown_error",
+      },
     });
 
     return new NextResponse(twimlMessage(fallback), {
