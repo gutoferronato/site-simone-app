@@ -224,9 +224,7 @@ ${trimmed}
     userMessage: contextualUserMessage,
   });
 
-  const shouldHandoff =
-    reply.toLowerCase().includes("encaminhar") ||
-    reply.toLowerCase().includes("atendimento humano");
+  const shouldHandoff = false;
 
   return {
     reply,
