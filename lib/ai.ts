@@ -1,40 +1,70 @@
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 type GenerateAIAnswerInput = {
   systemPrompt: string;
   userMessage: string;
+};
+
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string;
+      }>;
+    };
+  }>;
+  error?: {
+    message?: string;
+  };
 };
 
 export async function generateAIAnswer({
   systemPrompt,
   userMessage,
 }: GenerateAIAnswerInput) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY não configurada.");
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY não configurada.");
   }
 
-  const response = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-    temperature: 0.3,
-    max_tokens: 350,
-    messages: [
-      {
-        role: "system",
-        content: systemPrompt,
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-      {
-        role: "user",
-        content: userMessage,
-      },
-    ],
-  });
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: systemPrompt }],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: userMessage }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 350,
+        },
+      }),
+    }
+  );
+
+  const data = (await response.json()) as GeminiResponse;
+
+  if (!response.ok) {
+    throw new Error(
+      data.error?.message || `Erro Gemini API: ${response.status}`
+    );
+  }
+
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
   return (
-    response.choices[0]?.message?.content?.trim() ||
-    "Não consegui responder com segurança agora. Vou encaminhar para atendimento humano."
+    text ||
+    "Não consegui responder com segurança agora. Pode reformular sua dúvida?"
   );
 }
